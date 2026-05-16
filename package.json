@@ -1,0 +1,12 @@
+{
+  "name": "sup-kon-quest-matchmaker-room",
+  "version": "1.0.0",
+  "description": "Matchmaker WebSocket pour Sup Kon Quest RTS",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.0.0"
+  }
+}
