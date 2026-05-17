@@ -4,39 +4,70 @@ const http = require('http')
 const server = http.createServer()
 const wss = new WebSocket.Server({ server })
 
-// Annuaire des rooms { nom_room: ip_hote }
+// { nom_room: { ip, format, map, players, max_players, started } }
 const rooms = {}
 
 wss.on('connection', (ws) => {
-  console.log('Nouveau client connecté')
+  console.log('Nouveau client connecte')
 
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message)
 
-      // Hôte crée une room
+      // Hote cree une room
       if (data.action === 'create') {
-        rooms[data.room] = data.ip
-        console.log(`Room créée : ${data.room} → ${data.ip}`)
+        rooms[data.room] = {
+          ip:          data.ip,
+          format:      data.format,
+          map:         data.map,
+          players:     data.players || 1,
+          max_players: data.max_players || 2,
+          started:     false
+        }
+        console.log(`Room creee : ${data.room}`)
         ws.send(JSON.stringify({ status: 'created', room: data.room }))
       }
 
-      // Client cherche une room
+      // Client cherche une room par nom
       if (data.action === 'find') {
-        const ip = rooms[data.room]
-        if (ip) {
-          console.log(`Room trouvée : ${data.room} → ${ip}`)
-          ws.send(JSON.stringify({ status: 'found', ip: ip }))
+        const room = rooms[data.room]
+        if (room) {
+          console.log(`Room trouvee : ${data.room}`)
+          ws.send(JSON.stringify({ status: 'found', ip: room.ip, room: data.room }))
         } else {
-          console.log(`Room introuvable : ${data.room}`)
           ws.send(JSON.stringify({ status: 'not_found' }))
         }
       }
 
-      // Hôte supprime sa room
+      // Client demande la liste des rooms disponibles
+      if (data.action === 'list') {
+        const available = []
+        for (const [name, room] of Object.entries(rooms)) {
+          available.push({
+            name:        name,
+            format:      room.format,
+            map:         room.map,
+            players:     room.players,
+            max_players: room.max_players,
+            started:     room.started,
+            full:        room.players >= room.max_players
+          })
+        }
+        ws.send(JSON.stringify({ status: 'list', rooms: available }))
+      }
+
+      // Mettre a jour le nombre de joueurs
+      if (data.action === 'update') {
+        if (rooms[data.room]) {
+          rooms[data.room].players = data.players
+          rooms[data.room].started = data.started || false
+        }
+      }
+
+      // Supprimer une room
       if (data.action === 'delete') {
         delete rooms[data.room]
-        console.log(`Room supprimée : ${data.room}`)
+        console.log(`Room supprimee : ${data.room}`)
       }
 
     } catch (e) {
@@ -45,11 +76,11 @@ wss.on('connection', (ws) => {
   })
 
   ws.on('close', () => {
-    console.log('Client déconnecté')
+    console.log('Client deconnecte')
   })
 })
 
 const PORT = process.env.PORT || 3000
 server.listen(PORT, () => {
-  console.log(`Matchmaker démarré sur le port ${PORT}`)
+  console.log(`Matchmaker demarre sur le port ${PORT}`)
 })
