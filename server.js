@@ -16,16 +16,18 @@ wss.on('connection', (ws) => {
 
       // Hote cree une room
       if (data.action === 'create') {
-        rooms[data.room] = {
-          ip:          data.ip,
-          format:      data.format,
-          map:         data.map,
-          players:     data.players || 1,
-          max_players: data.max_players || 2,
-          started:     false
-        }
-        console.log(`Room creee : ${data.room}`)
-        ws.send(JSON.stringify({ status: 'created', room: data.room }))
+	      rooms[data.room] = {
+		      ip:          data.ip,
+		      format:      data.format,
+		      map:         data.map,
+		      mode:        data.mode || 'multi',
+		      diff:        data.diff || 'med',
+		      players:     data.players || 1,
+		      max_players: data.max_players || 2,
+		      started:     false
+	      }
+	      console.log(`Room creee : ${data.room}`)
+	      ws.send(JSON.stringify({ status: 'created', room: data.room }))
       }
 
       // Client cherche une room par nom
@@ -41,19 +43,21 @@ wss.on('connection', (ws) => {
 
       // Client demande la liste des rooms disponibles
       if (data.action === 'list') {
-        const available = []
-        for (const [name, room] of Object.entries(rooms)) {
-          available.push({
-            name:        name,
-            format:      room.format,
-            map:         room.map,
-            players:     room.players,
-            max_players: room.max_players,
-            started:     room.started,
-            full:        room.players >= room.max_players
-          })
-        }
-        ws.send(JSON.stringify({ status: 'list', rooms: available }))
+	      const available = []
+	      for (const [name, room] of Object.entries(rooms)) {
+		      available.push({
+			      name:        name,
+			      format:      room.format,
+			      map:         room.map,
+			      mode:        room.mode,
+			      diff:        room.diff,
+			      players:     room.players,
+			      max_players: room.max_players,
+			      started:     room.started,
+			      full:        room.players >= room.max_players
+		      })
+	      }
+	      ws.send(JSON.stringify({ status: 'list', rooms: available }))
       }
 
       // Mettre a jour le nombre de joueurs
