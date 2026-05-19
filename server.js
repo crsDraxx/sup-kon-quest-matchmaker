@@ -69,8 +69,6 @@ wss.on("connection", (ws) => {
     try {
       switch (action) {
 
-        // ── AUTH ──────────────────────────────────────────────────────────────
-
         case "register": {
           const { username, password, pseudo } = data;
           if (!username || !password || !pseudo)
@@ -89,7 +87,6 @@ wss.on("connection", (ws) => {
             "INSERT INTO users (username, pseudo, password) VALUES ($1,$2,$3) RETURNING id",
             [username, pseudo, hash]
           );
-          // ← console.log APRÈS le query, pas dedans !
           console.log(`[DB] Utilisateur créé : id=${result.rows[0].id}, username=${username}`);
           const token = jwt.sign({ id: result.rows[0].id, username }, JWT_SECRET, { expiresIn: "30d" });
           send(ws, { status: "registered", token, username, pseudo });
@@ -157,8 +154,6 @@ wss.on("connection", (ws) => {
           send(ws, { status: "stats_updated" });
           break;
         }
-
-        // ── ROOMS ─────────────────────────────────────────────────────────────
 
         case "create": {
           const { room, ip, format, map, mode, diff, players, max_players } = data;
