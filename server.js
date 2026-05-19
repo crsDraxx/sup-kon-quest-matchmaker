@@ -33,7 +33,17 @@ async function initDB() {
 const rooms = {};
 
 // ─── SERVEUR HTTP (Render a besoin d'un port HTTP pour le health-check) ───────
-const server = http.createServer((_req, res) => {
+const server = http.createServer(async(_req, res) => {
+  res.writeHead(200);
+  res.end("Matchmaker OK");
+  if (_req.url === "/users") {
+    const result = await pool.query(
+      "SELECT id, username, pseudo, wins, losses, created_at FROM users"
+    );
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(result.rows, null, 2));
+    return;
+  }
   res.writeHead(200);
   res.end("Matchmaker OK");
 });
