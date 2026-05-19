@@ -73,6 +73,7 @@ wss.on("connection", (ws) => {
           const hash  = await bcrypt.hash(password, 10);
           const result = await pool.query(
             "INSERT INTO users (username, pseudo, password) VALUES ($1,$2,$3) RETURNING id",
+            console.log(`[DB] Utilisateur créé : id=${result.rows[0].id}, username=${username}`);
             [username, pseudo, hash]
           );
           const token = jwt.sign({ id: result.rows[0].id, username }, JWT_SECRET, { expiresIn: "30d" });
