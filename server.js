@@ -13,7 +13,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// ─── INIT DB (crée la table si elle n'existe pas) ─────────────────────────────
+// ─── INIT DB ──────────────────────────────────────────────────────────────────
 async function initDB() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -26,22 +26,26 @@ async function initDB() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
-  console.log("[DB] Table users prête");
+  const count = await pool.query("SELECT COUNT(*) FROM users");
+  console.log(`[DB] Table users prête — ${count.rows[0].count} utilisateur(s)`);
 }
 
-// ─── ROOMS (en mémoire, comme avant) ─────────────────────────────────────────
+// ─── ROOMS (en mémoire) ───────────────────────────────────────────────────────
 const rooms = {};
 
-// ─── SERVEUR HTTP (Render a besoin d'un port HTTP pour le health-check) ───────
-const server = http.createServer(async(_req, res) => {
-  res.writeHead(200);
-  res.end("Matchmaker OK");
+// ─── SERVEUR HTTP ─────────────────────────────────────────────────────────────
+const server = http.createServer(async (_req, res) => {
   if (_req.url === "/users") {
-    const result = await pool.query(
-      "SELECT id, username, pseudo, wins, losses, created_at FROM users"
-    );
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(result.rows, null, 2));
+    try {
+      const result = await pool.query(
+        "SELECT id, username, pseudo, wins, losses, created_at FROM users"
+      );
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(result.rows, null, 2));
+    } catch (err) {
+      res.writeHead(500);
+      res.end("Erreur DB");
+    }
     return;
   }
   res.writeHead(200);
@@ -65,7 +69,7 @@ wss.on("connection", (ws) => {
     try {
       switch (action) {
 
-        // ── AUTH ────────────────────────────────────────────────────────────
+        // ── AUTH ──────────────────────────────────────────────────────────────
 
         case "register": {
           const { username, password, pseudo } = data;
@@ -80,12 +84,13 @@ wss.on("connection", (ws) => {
           if (exists.rows.length > 0)
             return send(ws, { status: "error", message: "Nom d'utilisateur déjà pris" });
 
-          const hash  = await bcrypt.hash(password, 10);
+          const hash   = await bcrypt.hash(password, 10);
           const result = await pool.query(
             "INSERT INTO users (username, pseudo, password) VALUES ($1,$2,$3) RETURNING id",
-            console.log(`[DB] Utilisateur créé : id=${result.rows[0].id}, username=${username}`);
             [username, pseudo, hash]
           );
+          // ← console.log APRÈS le query, pas dedans !
+          console.log(`[DB] Utilisateur créé : id=${result.rows[0].id}, username=${username}`);
           const token = jwt.sign({ id: result.rows[0].id, username }, JWT_SECRET, { expiresIn: "30d" });
           send(ws, { status: "registered", token, username, pseudo });
           break;
@@ -109,6 +114,7 @@ wss.on("connection", (ws) => {
             return send(ws, { status: "error", message: "Mot de passe incorrect" });
 
           const token = jwt.sign({ id: user.id, username }, JWT_SECRET, { expiresIn: "30d" });
+          console.log(`[DB] Login : ${username}`);
           send(ws, { status: "logged_in", token, username, pseudo: user.pseudo, wins: user.wins, losses: user.losses });
           break;
         }
@@ -132,7 +138,6 @@ wss.on("connection", (ws) => {
         }
 
         case "logout":
-          // JWT est stateless : on répond juste OK, le client supprime son token local
           send(ws, { status: "logged_out" });
           break;
 
@@ -148,11 +153,12 @@ wss.on("connection", (ws) => {
           } else {
             await pool.query("UPDATE users SET losses=losses+1 WHERE id=$1", [payload.id]);
           }
+          console.log(`[DB] Stats mises à jour : id=${payload.id}, won=${won}`);
           send(ws, { status: "stats_updated" });
           break;
         }
 
-        // ── ROOMS (inchangé) ─────────────────────────────────────────────────
+        // ── ROOMS ─────────────────────────────────────────────────────────────
 
         case "create": {
           const { room, ip, format, map, mode, diff, players, max_players } = data;
