@@ -28,10 +28,24 @@ async function initDB() {
   `);
   const count = await pool.query("SELECT COUNT(*) FROM users");
   console.log(`[DB] Table users prête — ${count.rows[0].count} utilisateur(s)`);
-}
 
-// ─── ROOMS (en mémoire) ───────────────────────────────────────────────────────
-const rooms = {};
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS rooms (
+      name        TEXT PRIMARY KEY,
+      ip          TEXT,
+      format      TEXT,
+      map         TEXT,
+      mode        TEXT,
+      diff        TEXT,
+      players     INT,
+      max_players INT,
+      started     BOOLEAN     NOT NULL DEFAULT FALSE,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  const rcount = await pool.query("SELECT COUNT(*) FROM rooms");
+  console.log(`[DB] Table rooms prête — ${rcount.rows[0].count} room(s)`);
+}
 
 // ─── SERVEUR HTTP ─────────────────────────────────────────────────────────────
 const server = http.createServer(async (_req, res) => {
@@ -157,22 +171,32 @@ wss.on("connection", (ws) => {
 
         case "create": {
           const { room, ip, format, map, mode, diff, players, max_players } = data;
-          rooms[room] = { ip, format, map, mode, diff, players, max_players, started: false };
+          await pool.query(
+            `INSERT INTO rooms (name, ip, format, map, mode, diff, players, max_players, started)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,FALSE)
+             ON CONFLICT (name) DO UPDATE SET
+               ip=$2, format=$3, map=$4, mode=$5, diff=$6,
+               players=$7, max_players=$8, started=FALSE`,
+            [room, ip, format, map, mode, diff, players, max_players]
+          );
           console.log(`[Rooms] Créée : ${room}`);
           send(ws, { status: "created", room });
           break;
         }
 
         case "find": {
-          const r = rooms[data.room];
-          if (r) send(ws, { status: "found", ip: r.ip, room: data.room });
-          else   send(ws, { status: "not_found" });
+          const r = await pool.query("SELECT ip FROM rooms WHERE name=$1", [data.room]);
+          if (r.rows.length > 0) send(ws, { status: "found", ip: r.rows[0].ip, room: data.room });
+          else                   send(ws, { status: "not_found" });
           break;
         }
 
         case "list": {
-          const list = Object.entries(rooms).map(([name, r]) => ({
-            name, ...r,
+          const result = await pool.query(
+            "SELECT name, ip, format, map, mode, diff, players, max_players, started FROM rooms"
+          );
+          const list = result.rows.map(r => ({
+            ...r,
             full: r.players >= r.max_players
           }));
           send(ws, { status: "list", rooms: list });
@@ -180,15 +204,15 @@ wss.on("connection", (ws) => {
         }
 
         case "update": {
-          if (rooms[data.room]) {
-            rooms[data.room].players = data.players;
-            rooms[data.room].started = data.started;
-          }
+          await pool.query(
+            "UPDATE rooms SET players=$2, started=$3 WHERE name=$1",
+            [data.room, data.players, data.started]
+          );
           break;
         }
 
         case "delete": {
-          delete rooms[data.room];
+          await pool.query("DELETE FROM rooms WHERE name=$1", [data.room]);
           console.log(`[Rooms] Supprimée : ${data.room}`);
           break;
         }
