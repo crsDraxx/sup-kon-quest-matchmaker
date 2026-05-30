@@ -216,6 +216,21 @@ wss.on("connection", (ws) => {
           console.log(`[Rooms] Supprimée : ${data.room}`);
           break;
         }
+        case "leaderboard": {
+          try {
+            const result = await pool.query(
+              `SELECT username, pseudo, wins, losses
+               FROM users
+               ORDER BY wins DESC, losses ASC, created_at ASC
+               LIMIT 20`
+            );
+            send(ws, { status: "leaderboard", players: result.rows });
+          } catch (err) {
+            console.error("[leaderboard]", err);
+            send(ws, { status: "error", message: "leaderboard_failed" });
+          }
+          break;
+        }
 
         default:
           send(ws, { status: "error", message: `Action inconnue : ${action}` });
